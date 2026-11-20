@@ -10,6 +10,12 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString
 const D = x => new Date(x);
 const pad = n => String(n).padStart(2, '0');
 
+// Inside the Android app, MainActivity injects window.AndroidBridge for saving and opening files.
+const NATIVE = window.AndroidBridge || null;
+const IS_ANDROID = !!NATIVE || /Android/i.test(navigator.userAgent);
+const STORE = IS_ANDROID ? 'Files / Google Drive' : 'Files / iCloud Drive';
+const CLOUD = IS_ANDROID ? 'Google Drive' : 'iCloud Drive';
+
 function icon(name, cls = '') {
   let d = ICONS[name] || ICONS.star, fill = false;
   if (d.startsWith('F:')) { fill = true; d = d.slice(2); }
@@ -150,7 +156,7 @@ function homeView() {
     h += `<button class="tile" data-act="open" data-val="addSymptoms"><span style="color:var(--accent)">${icon('plus')}</span>Add More Symptoms</button>`;
     h += reliefSection(ev);
   } else {
-    if (needsBackup()) h += `<button class="banner" data-act="backup">${icon('cloud')}<span class="grow small"><b>Changes not backed up yet</b><br><span class="sub">Tap to save a backup to Files / iCloud Drive</span></span>${icon('right')}</button>`;
+    if (needsBackup()) h += `<button class="banner" data-act="backup">${icon('cloud')}<span class="grow small"><b>Changes not backed up yet</b><br><span class="sub">Tap to save a backup to ${STORE}</span></span>${icon('right')}</button>`;
     const streak = streakDays();
     const line = streak == null ? 'Tap for instant relief guidance' : streak === 0 ? 'Tap for relief guidance' : `🎉 ${plural(streak, 'day')} migraine-free`;
     h += `<button class="hero" data-act="startAttackMode"><div class="pulse"><i>${icon('heartZap')}</i></div><b>I have a migraine</b><span>${line}</span></button>`;
@@ -319,7 +325,7 @@ function calendarCard() {
 function backupCard() {
   const warn = needsBackup();
   return `<div class="card stack-s">${sectionH('Data & Backup', 'cloud')}
-    <div class="small sub">Your data is stored on this device. Save a backup file to Files / iCloud Drive to keep it safe and move it between devices.</div>
+    <div class="small sub">Your data is stored on this device. Save a backup file to ${STORE} to keep it safe and move it between devices.</div>
     <div class="small" style="color:${warn ? 'var(--amber)' : 'var(--subtle)'}">${S.lastBackupAt ? `Last backup: ${fmtDate(S.lastBackupAt)}, ${fmtTime(S.lastBackupAt)}${warn ? ' · changes since then' : ''}` : S.events.length ? 'No backup yet' : 'Nothing to back up yet'}</div>
     <div class="grid2"><button class="btn primary" style="padding:13px" data-act="backup">${icon('upload')}Back up</button>
       <button class="btn ghost" style="padding:13px" data-act="restore">${icon('download')}Restore</button></div></div>`;
@@ -347,7 +353,7 @@ function profileView() {
       <span style="color:${S.lifestyle.completed ? 'var(--success)' : 'var(--subtle)'}">${icon(S.lifestyle.completed ? 'check' : 'right')}</span></button>
     ${backupCard()}
     <div class="card stack-s">${sectionH('Your Privacy', 'shield')}
-      ${[['phone', 'All your data stays on this device. Nothing is sent to a server.'], ['cloud', 'Backups are files you save yourself, for example to iCloud Drive.'], ['lock', 'No account, no tracking, no analytics.']].map(([ic, t]) =>
+      ${[['phone', 'All your data stays on this device. Nothing is sent to a server.'], ['cloud', `Backups are files you save yourself, for example to ${CLOUD}.`], ['lock', 'No account, no tracking, no analytics.']].map(([ic, t]) =>
         `<div class="row small sub" style="align-items:flex-start"><span style="color:var(--accent)">${icon(ic)}</span><span>${t}</span></div>`).join('')}</div>
     <div class="tiny sub center" style="opacity:.6">MigraineEase v${VERSION} · Not a medical device. Talk to your doctor about treatment.</div>
   </div>`;
@@ -526,20 +532,24 @@ const SHEETS = {
   settings() {
     const item = (ic, label, act, val, extra = '') => `<button class="list-row" data-act="${act}" ${val ? `data-val="${val}"` : ''}><span style="color:var(--accent-soft)">${icon(ic)}</span><span class="grow" style="font-size:15px">${label}</span>${extra}<span class="sub tiny">${icon('right')}</span></button>`;
     const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    const where = NATIVE ? 'You are using the Android app.'
+      : standalone ? 'You are using the Home Screen app.'
+      : IS_ANDROID ? 'Install the app (Chrome menu → Add to Home screen) so it works offline and keeps its data reliably.'
+      : 'Add the app to your Home Screen (Share → Add to Home Screen) so it works offline and keeps its data reliably.';
     return sheetFrame({ title: 'Settings', left: 'Done', full: true, body: `
       <div class="stack-s"><div class="label">Personalize</div>
         ${item('heart', 'Custom Symptoms', 'open', 'customSymptoms', `<span class="sub small">${S.customSymptoms.length || ''}</span>`)}
         ${item('alert', 'Custom Triggers', 'open', 'triggers', `<span class="sub small">${S.customTriggers.length || ''}</span>`)}
         ${item('list', 'Lifestyle Questionnaire', 'open', 'lifestyle')}</div>
       <div class="stack-s"><div class="label">Your data</div>
-        ${item('upload', 'Back up to Files / iCloud Drive', 'backup')}
+        ${item('upload', `Back up to ${STORE}`, 'backup')}
         ${item('download', 'Restore from a backup file', 'restore')}
         ${item('file', 'Export attacks as a table (CSV)', 'exportCsv')}
         ${S.events.length ? '' : item('sparkles', 'Load example data', 'demo')}
         <button class="list-row" data-act="erase" style="color:var(--danger)">${icon('trash')}<span class="grow" style="font-size:15px">Erase all data</span></button></div>
       <div class="stack-s"><div class="label">About</div>
         <div class="card small sub stack-s"><div><b style="color:#fff">How it works</b><br>Tap “I have a migraine”, pick your symptoms, and the app tracks the attack. When it ends, rate it and note triggers. Over time, Insights shows your patterns and what actually helps you.</div>
-          <div><b style="color:#fff">Where your data lives</b><br>Only in this app on this device. ${standalone ? 'You are using the Home Screen app.' : 'Add the app to your Home Screen (Share → Add to Home Screen) so it works offline and keeps its data reliably.'} Back up regularly to Files / iCloud Drive.</div></div>
+          <div><b style="color:#fff">Where your data lives</b><br>Only in this app on this device. ${where} Back up regularly to ${STORE}.</div></div>
         <div class="list-row"><span class="grow" style="font-size:15px">Version</span><span class="sub">${VERSION}</span></div></div>` });
   }
 };
@@ -590,7 +600,15 @@ function toast(msg) {
 }
 
 /* ================= backup, restore, export ================= */
+// Returns 'saved' | 'shared' | 'downloaded' | 'cancelled' | 'error'.
 async function shareFile(file) {
+  if (NATIVE) {
+    const text = await file.text();
+    return new Promise(res => {
+      window.__nativeSaved = r => { window.__nativeSaved = null; res(r === true ? 'saved' : r === false ? 'cancelled' : 'error'); };
+      NATIVE.saveFile(file.name, file.type, text);
+    });
+  }
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file] }); return 'shared'; }
     catch (e) { if (e.name === 'AbortError') return 'cancelled'; }
@@ -608,10 +626,11 @@ async function backup() {
   const file = new File([JSON.stringify(payload, null, 2)], 'MigraineEase-backup.json', { type: 'application/json' });
   const r = await shareFile(file);
   if (r === 'cancelled') return;
+  if (r === 'error') return toast('Could not save the backup file');
   S.lastBackupAt = now; S.changedAt = now; save(false);
   if (UI.sheets.length) refreshSheet();
   render();
-  toast(r === 'shared' ? 'Backup handed over — choose “Save to Files”' : 'Backup file downloaded');
+  toast(r === 'saved' ? 'Backup saved' : r === 'shared' ? (IS_ANDROID ? 'Backup handed over — pick Drive or Files' : 'Backup handed over — choose “Save to Files”') : 'Backup file downloaded');
 }
 function restoreFrom(text) {
   let p;
@@ -637,6 +656,8 @@ async function exportCsv() {
   const csv = '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n');
   const r = await shareFile(new File([csv], 'MigraineEase-attacks.csv', { type: 'text/csv' }));
   if (r === 'downloaded') toast('Table downloaded');
+  else if (r === 'saved') toast('Table saved');
+  else if (r === 'error') toast('Could not save the table');
 }
 function loadDemo() {
   const s = n => DEFAULT_SYMPTOMS.find(x => x.name === n);
@@ -851,7 +872,13 @@ const A = {
 
   // --- data ---
   backup() { backup(); },
-  restore() { const i = $('#restore-input'); i.value = ''; i.click(); },
+  restore() {
+    if (NATIVE) {
+      window.__nativeOpened = text => { window.__nativeOpened = null; if (text != null) restoreFrom(text); };
+      return NATIVE.openFile();
+    }
+    const i = $('#restore-input'); i.value = ''; i.click();
+  },
   exportCsv() { exportCsv(); },
   async demo() { if (await ask('Load example data?', 'Adds five made-up attacks so you can see how the app looks when filled. You can erase them in Settings.', 'Load')) loadDemo(); },
   async erase() {
@@ -891,6 +918,16 @@ render();
 
 // Ask the browser not to evict our data, and enable offline use where service workers are available.
 navigator.storage?.persist?.().catch(() => {});
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+// Android back button: close the topmost layer. Returns false when there is nothing left to close.
+window.handleBack = () => {
+  const dlg = $('.dialog-wrap');
+  if (dlg) { dlg.querySelector('[data-r="0"]').click(); return true; }
+  if (UI.sheets.length) { closeSheet(); return true; }
+  if (UI.attack) { A.cancelAttackMode(); return true; }
+  if (UI.tab !== 'home') { A.tab({ dataset: { val: 'home' } }); return true; }
+  return false;
+};
+
+if (!NATIVE && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

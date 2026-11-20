@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The Android app ships the same files as the web app. They are copied in at build time from
+// ../../web (this project) or ../.. (the published repo, where the web files sit at the root).
+def webSrc = ['../../web', '../..'].collect { file(it) }.find { new File(it, 'app.js').exists() }
+if (webSrc == null) throw new GradleException('Web app files (app.js, index.html, ...) not found')
+def webOut = layout.buildDirectory.dir('generated/webassets').get().asFile
+
+def syncWebAssets = tasks.register('syncWebAssets', Sync) {
+    from(webSrc) {
+        include 'index.html', 'styles.css', 'data.js', 'app.js', 'manifest.webmanifest', 'icons/**'
+    }
+    into webOut
+}
+tasks.named('preBuild') { dependsOn syncWebAssets }
+
+// Release signing: a fixed key is required so that updates install over the old version
+// without uninstalling (which would delete the user's data).
+def keystorePath = System.getenv('MIGRAINEEASE_KEYSTORE')
+def keystorePassword = System.getenv('MIGRAINEEASE_KEYSTORE_PASSWORD')
+
+android {
+    namespace 'io.github.wildcs.migraineease'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.wildcs.migraineease'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                storeType 'pkcs12'
+                keyAlias 'migraineease'
+                keyPassword keystorePassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystorePath) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs = [webOut]
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.activity:activity:1.9.3'
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

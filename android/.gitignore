@@ -1,0 +1,10 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+# Signing key: never commit it. Keep a safe copy elsewhere.
+keystore/
+*.p12
+*.jks
+*.keystore
