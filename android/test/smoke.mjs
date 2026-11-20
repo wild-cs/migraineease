@@ -42,7 +42,12 @@ async function connect() {
         return r.result?.result?.value;
       };
       for (let i = 0; i < 30 && !(await js("!!document.querySelector('.tabbar')")); i++) await sleep(500);
-      return { js, close: () => ws.close() };
+      // A real tap (counts as a user gesture, so Android shows the keyboard for text fields).
+      const tap = async (x, y) => {
+        await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+        await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      };
+      return { js, tap, close: () => ws.close() };
     } catch (e) {
       await sleep(1000);
     }
@@ -86,11 +91,14 @@ check('Back closes an open sheet', await app.js('UI.sheets.length === 0'));
 
 // Keyboard: the text field must stay visible above the on-screen keyboard
 await app.js("A.open({ dataset: { val: 'addTip' } }); true"); await sleep(700);
-sh('adb shell input tap 540 600'); await sleep(300);
-await app.js("document.querySelector('#tip-text').focus(); true"); await sleep(1500);
+const h0 = await app.js('innerHeight');
+const box = await app.js("(() => { const r = document.querySelector('#tip-text').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 20 }; })()");
+await app.tap(box.x, box.y); await sleep(2000);
 shot('6-keyboard');
-const kb = await app.js("(() => { const r = document.querySelector('#tip-text').getBoundingClientRect(); return { bottom: r.bottom, h: innerHeight }; })()");
+const kb = await app.js("(() => { const r = document.querySelector('#tip-text').getBoundingClientRect(); return { focused: document.activeElement.id, bottom: Math.round(r.bottom), h: innerHeight }; })()");
+check('keyboard opens when tapping a text field', kb.focused === 'tip-text' && kb.h < h0 - 100, `height ${h0} → ${kb.h}`);
 check('text field stays above the keyboard', kb.bottom <= kb.h, JSON.stringify(kb));
+await app.js("document.querySelector('#tip-text').value = 'Typed on Android'; true");
 await app.js("document.activeElement.blur(); closeSheet(); true"); await sleep(600);
 
 // Saving a backup opens Android's file picker; cancelling it is reported back to the app
@@ -102,9 +110,8 @@ check('Android file picker opens for the backup', /documentsui/i.test(resumed), 
 await back(); await sleep(1500);
 check('cancelling the picker is reported to the app', (await app.js('window.__r')) === 'cancelled', String(await app.js('window.__r')));
 
-// Data must survive closing the app completely
+// Data must survive closing the app completely, even right after a change
 await app.js('if (S.activeEventId) { activeEvent().end = new Date().toISOString(); S.activeEventId = null; } loadDemo(); true');
-await sleep(500);
 app.close();
 sh(`adb shell am force-stop ${PKG}`); await sleep(1000);
 sh(`adb shell am start -W -n ${PKG}/.MainActivity`); await sleep(4000);

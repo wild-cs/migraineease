@@ -1,6 +1,6 @@
 // Offline support: cache the app shell so MigraineEase opens without a connection.
 // Bump CACHE when any file in ASSETS changes.
-const CACHE = 'migraineease-v2';
+const CACHE = 'migraineease-v3';
 const ASSETS = [
   './', 'index.html', 'styles.css', 'data.js', 'app.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'

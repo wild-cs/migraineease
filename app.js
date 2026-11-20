@@ -52,17 +52,22 @@ const blank = () => ({
   activeEventId: null, myTips: [], savedTips: [], lastBackupAt: null, changedAt: null
 });
 let S = load();
+// On Android the app's own data file is the main copy (written to disk immediately);
+// localStorage is kept as well, and is the only store in the browser.
 function load() {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = (NATIVE && NATIVE.loadData && NATIVE.loadData()) || localStorage.getItem(KEY);
     if (raw) return Object.assign(blank(), JSON.parse(raw));
   } catch (e) { /* fall through to an empty state */ }
   return blank();
 }
 function save(changed = true) {
   if (changed) S.changedAt = new Date().toISOString();
-  try { localStorage.setItem(KEY, JSON.stringify(S)); }
-  catch (e) { toast('Could not save — storage is full or blocked'); }
+  const json = JSON.stringify(S);
+  let ok = true;
+  if (NATIVE && NATIVE.saveData) ok = NATIVE.saveData(json) === true;
+  try { localStorage.setItem(KEY, json); } catch (e) { if (!NATIVE) ok = false; }
+  if (!ok) toast('Could not save — storage is full or blocked');
 }
 const needsBackup = () => S.events.length > 0 && S.changedAt && (!S.lastBackupAt || S.changedAt > S.lastBackupAt);
 

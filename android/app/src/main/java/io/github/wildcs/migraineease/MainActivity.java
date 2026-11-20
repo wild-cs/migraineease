@@ -6,6 +6,7 @@ import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.AtomicFile;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.webkit.JavascriptInterface;
@@ -30,6 +31,8 @@ import androidx.webkit.WebViewAssetLoader;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -184,6 +187,34 @@ public class MainActivity extends ComponentActivity {
 
     /** Called from JavaScript as window.AndroidBridge.*; runs on a background thread. */
     private class Bridge {
+        // The app's data is written synchronously to a file on every change. WebView's own
+        // localStorage commits to disk with a delay, so a change made just before the app is
+        // swiped away could otherwise be lost.
+        private final AtomicFile dataFile = new AtomicFile(new File(getFilesDir(), "migraineease-data.json"));
+
+        @JavascriptInterface
+        public synchronized String loadData() {
+            try {
+                return new String(dataFile.readFully(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                return null; // first start: nothing saved yet
+            }
+        }
+
+        @JavascriptInterface
+        public synchronized boolean saveData(String json) {
+            FileOutputStream out = null;
+            try {
+                out = dataFile.startWrite();
+                out.write(json.getBytes(StandardCharsets.UTF_8));
+                dataFile.finishWrite(out); // flushes to disk, then atomically replaces the old file
+                return true;
+            } catch (IOException e) {
+                if (out != null) dataFile.failWrite(out);
+                return false;
+            }
+        }
+
         @JavascriptInterface
         public void saveFile(String name, String mime, String content) {
             runOnUiThread(() -> {

@@ -8,6 +8,8 @@ PKG=io.github.wildcs.migraineease
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$OUT"
+# The emulator has a hardware keyboard; show the on-screen keyboard anyway, like on a phone.
+adb shell settings put secure show_ime_with_hard_keyboard 1
 adb install -r "$APK"
 adb shell am start -W -n "$PKG/.MainActivity"
 sleep 6
